@@ -156,6 +156,34 @@
           </webApp>
         </configuration>
       </plugin>
+      <plugin>
+        <groupId>com.mycila</groupId>
+        <artifactId>license-maven-plugin</artifactId>
+        <inherited>false</inherited>
+        <configuration>
+          <failIfMissing>true</failIfMissing>
+          <aggregate>true</aggregate>
+          <strictCheck>true</strictCheck>
+        </configuration>
+        <executions>
+          <execution>
+            <id>check-java-headers</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <header>header-template-java.txt</header>
+              <mapping>
+                <java>DOUBLESLASH_STYLE</java>
+              </mapping>
+              <includes>
+                <include>**/*.java</include>
+              </includes>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 
