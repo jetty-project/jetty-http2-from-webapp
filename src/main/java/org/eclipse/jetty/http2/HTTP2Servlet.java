@@ -3,14 +3,15 @@ package org.eclipse.jetty.http2;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-
 import javax.servlet.AsyncContext;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.http.HttpFields;
+import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpURI;
 import org.eclipse.jetty.http.HttpVersion;
 import org.eclipse.jetty.http.MetaData;
@@ -20,14 +21,16 @@ import org.eclipse.jetty.http2.api.server.ServerSessionListener;
 import org.eclipse.jetty.http2.client.HTTP2Client;
 import org.eclipse.jetty.http2.frames.DataFrame;
 import org.eclipse.jetty.http2.frames.HeadersFrame;
+import org.eclipse.jetty.util.BufferUtil;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.Promise;
+import org.eclipse.jetty.util.StringUtil;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 
 public class HTTP2Servlet extends javax.servlet.http.HttpServlet {
-    private final Logger logger = Logger.getLogger(HTTP2Servlet.class);
-    private final SslContextFactory sslContextFactory = new SslContextFactory();
+    private final Logger logger = LogManager.getLogger(HTTP2Servlet.class);
+    private final SslContextFactory sslContextFactory = new SslContextFactory.Client();
     private final HTTP2Client client = new HTTP2Client();
 
     @Override
@@ -48,7 +51,7 @@ public class HTTP2Servlet extends javax.servlet.http.HttpServlet {
     }
 
     @Override
-    protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+    protected void service(HttpServletRequest request, HttpServletResponse response) throws IOException {
         logger.info(String.format("Request %s", request.getRequestURI()));
 
         AsyncContext asyncContext = request.startAsync();
@@ -80,14 +83,26 @@ public class HTTP2Servlet extends javax.servlet.http.HttpServlet {
                 }, new Stream.Listener.Adapter() {
                     @Override
                     public void onHeaders(Stream stream, HeadersFrame frame) {
-                        int status = ((MetaData.Response)frame.getMetaData()).getStatus();
+                        MetaData.Response metaDataResponse = (MetaData.Response)frame.getMetaData();
+                        int status = metaDataResponse.getStatus();
                         logger.info(String.format("Stream response, status=%d", status));
                         response.setStatus(status);
+                        response.setCharacterEncoding("utf-8");
+                        String contentType = metaDataResponse.getFields().get(HttpHeader.CONTENT_TYPE);
+                        if(StringUtil.isNotBlank(contentType))
+                            response.setContentType(contentType);
+                        else
+                            response.setContentType("text/html");
                     }
 
                     @Override
                     public void onData(Stream stream, DataFrame frame, Callback callback) {
                         logger.info(String.format("Stream response content, bytes=%d", frame.getData().remaining()));
+                        try {
+                            response.getOutputStream().write(BufferUtil.toArray(frame.getData()));
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
                         callback.succeeded();
                         if (frame.isEndStream()) {
                             logger.info("Stream response complete");
